@@ -50,17 +50,30 @@
     .msg.self .msg-user { color: #8eb87a; }
     .msg-time { font-size: 10px; color: var(--muted); }
     .msg-body { padding: 3px 10px 3px 0; word-break: break-word; white-space: pre-wrap; }
+    .msg-body img { display: block; max-width: 280px; max-height: 320px; border-radius: var(--radius); margin-top: 4px; cursor: pointer; border: 1px solid var(--border); }
+    .msg-body img:hover { border-color: var(--accent-dim); }
+    .uploading { color: var(--muted); font-style: italic; }
+
     .date-divider { display: flex; align-items: center; gap: 10px; margin: 12px 0 8px; color: var(--muted); font-size: 10px; letter-spacing: .08em; }
     .date-divider::before, .date-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
     .status-line { text-align: center; font-size: 11px; color: var(--muted); padding: 8px 0; }
 
-    #input-area { border-top: 1px solid var(--border); padding: 14px 20px; display: flex; gap: 10px; align-items: flex-end; flex-shrink: 0; }
+    #input-area { border-top: 1px solid var(--border); padding: 14px 20px; display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0; }
     #msg-input { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: var(--font); font-size: 13px; padding: 8px 10px; resize: none; outline: none; max-height: 120px; min-height: 36px; line-height: 1.6; transition: border-color .15s; }
     #msg-input:focus { border-color: var(--accent-dim); }
     #msg-input::placeholder { color: var(--muted); }
-    #send-btn { background: transparent; border: 1px solid var(--accent-dim); border-radius: var(--radius); color: var(--accent); font-family: var(--font); font-size: 16px; width: 36px; height: 36px; flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s; }
+
+    .icon-btn { background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); width: 36px; height: 36px; flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .15s, border-color .15s, color .15s; }
+    .icon-btn:hover { border-color: var(--accent-dim); color: var(--accent); }
+    .icon-btn:disabled { opacity: .3; cursor: default; }
+    #send-btn { border-color: var(--accent-dim); color: var(--accent); font-size: 16px; }
     #send-btn:hover { background: var(--self-bg); border-color: var(--accent); }
-    #send-btn:disabled { opacity: .3; cursor: default; }
+    #file-input { display: none; }
+
+    /* lightbox */
+    #lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 200; align-items: center; justify-content: center; cursor: zoom-out; }
+    #lightbox.open { display: flex; }
+    #lightbox img { max-width: 90vw; max-height: 90vh; border-radius: var(--radius); }
   </style>
 </head>
 <body>
@@ -85,31 +98,45 @@
   </header>
   <div id="messages"><div class="status-line" id="loading-line">connecting&hellip;</div></div>
   <div id="input-area">
-    <textarea id="msg-input" placeholder="message" maxlength="1000" rows="1" autocomplete="off"></textarea>
-    <button id="send-btn" disabled>&#8593;</button>
+    <input id="file-input" type="file" accept="image/*" />
+    <button class="icon-btn" id="img-btn" title="send image">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+    </button>
+    <textarea id="msg-input" placeholder="message  (or /clear to wipe chat)" maxlength="1000" rows="1" autocomplete="off"></textarea>
+    <button class="icon-btn" id="send-btn" disabled title="send (Enter)">&#8593;</button>
   </div>
 </div>
 
+<div id="lightbox"><img id="lightbox-img" src="" alt="" /></div>
+
 <script>
-  // ── CONFIG — replace these two values ──────────────────
+  // ── CONFIG ─────────────────────────────────────────────
   const SUPABASE_URL      = 'https://uagbptlwxrmfdqtpbmwz.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVhZ2JwdGx3eHJtZmRxdHBibXd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyNzYyOTgsImV4cCI6MjA5NTg1MjI5OH0.oM94DGrGOng9x9XqQdxS-W8UkQRhRyMxAjcCxbhcdss';
+  const IMAGE_BUCKET      = 'chat-images';   // storage bucket name
   // ───────────────────────────────────────────────────────
 
-  const loginScreen  = document.getElementById('login-screen');
-  const usernameInput= document.getElementById('username-input');
-  const joinBtn      = document.getElementById('join-btn');
-  const loginError   = document.getElementById('login-error');
-  const app          = document.getElementById('app');
-  const headerUser   = document.getElementById('header-user');
-  const statusDot    = document.getElementById('status-dot');
-  const messagesEl   = document.getElementById('messages');
-  const loadingLine  = document.getElementById('loading-line');
-  const msgInput     = document.getElementById('msg-input');
-  const sendBtn      = document.getElementById('send-btn');
+  const IMG_PREFIX = 'img::';
+  const CLEAR_MSG  = '__clear__';
+
+  const loginScreen   = document.getElementById('login-screen');
+  const usernameInput = document.getElementById('username-input');
+  const joinBtn       = document.getElementById('join-btn');
+  const loginError    = document.getElementById('login-error');
+  const app           = document.getElementById('app');
+  const headerUser    = document.getElementById('header-user');
+  const statusDot     = document.getElementById('status-dot');
+  const messagesEl    = document.getElementById('messages');
+  const msgInput      = document.getElementById('msg-input');
+  const sendBtn       = document.getElementById('send-btn');
+  const imgBtn        = document.getElementById('img-btn');
+  const fileInput     = document.getElementById('file-input');
+  const lightbox      = document.getElementById('lightbox');
+  const lightboxImg   = document.getElementById('lightbox-img');
 
   let client, currentUser, lastDate;
 
+  // ── Auth ───────────────────────────────────────────────
   function showError(msg) {
     loginError.textContent = msg;
     loginError.style.display = 'block';
@@ -124,11 +151,9 @@
     const name = usernameInput.value.trim();
     if (!name) return showError('please enter a username');
     if (!window.supabase) return showError('supabase failed to load — check console');
-
     loginError.style.display = 'none';
     joinBtn.disabled = true;
     joinBtn.textContent = 'connecting\u2026';
-
     try {
       client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       currentUser = name;
@@ -143,6 +168,7 @@
     }
   }
 
+  // ── Helpers ────────────────────────────────────────────
   function esc(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
@@ -156,8 +182,28 @@
     if (d.toDateString() === y.toDateString()) return 'yesterday';
     return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
   }
+  function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+  function nearBottom() { return messagesEl.scrollHeight - messagesEl.clientHeight - messagesEl.scrollTop < 60; }
 
+  function statusLine(text, color) {
+    const e = document.createElement('div');
+    e.className = 'status-line';
+    if (color) e.style.color = color;
+    e.textContent = text;
+    messagesEl.appendChild(e);
+    scrollToBottom();
+    return e;
+  }
+
+  // ── Render message ─────────────────────────────────────
   function appendMessage(msg) {
+    if (msg.message === CLEAR_MSG) {
+      clearUI();
+      // sender also deletes all rows
+      if (msg.username === currentUser) deleteAllMessages();
+      return;
+    }
+
     const dateLabel = fmtDate(msg.created_at);
     if (dateLabel !== lastDate) {
       const d = document.createElement('div');
@@ -166,12 +212,50 @@
       messagesEl.appendChild(d);
       lastDate = dateLabel;
     }
+
+    const isImg = msg.message.startsWith(IMG_PREFIX);
     const row = document.createElement('div');
     row.className = 'msg' + (msg.username === currentUser ? ' self' : '');
-    row.innerHTML = `<div class="msg-meta"><span class="msg-user">${esc(msg.username)}</span><span class="msg-time">${fmtTime(msg.created_at)}</span></div><div class="msg-body">${esc(msg.content)}</div>`;
+
+    let bodyHtml;
+    if (isImg) {
+      const url = esc(msg.message.slice(IMG_PREFIX.length));
+      bodyHtml = `<img src="${url}" alt="image" loading="lazy" />`;
+    } else {
+      bodyHtml = esc(msg.message);
+    }
+
+    row.innerHTML = `
+      <div class="msg-meta">
+        <span class="msg-user">${esc(msg.username)}</span>
+        <span class="msg-time">${fmtTime(msg.created_at)}</span>
+      </div>
+      <div class="msg-body">${bodyHtml}</div>`;
     messagesEl.appendChild(row);
+
+    // lightbox on image click
+    if (isImg) {
+      row.querySelector('img').addEventListener('click', e => {
+        lightboxImg.src = e.target.src;
+        lightbox.classList.add('open');
+      });
+    }
   }
 
+  lightbox.addEventListener('click', () => lightbox.classList.remove('open'));
+
+  // ── Clear ──────────────────────────────────────────────
+  function clearUI() {
+    messagesEl.innerHTML = '';
+    lastDate = null;
+    statusLine('chat cleared');
+  }
+
+  async function deleteAllMessages() {
+    await client.from('messages').delete().gte('id', 0);
+  }
+
+  // ── Load history ───────────────────────────────────────
   async function loadHistory() {
     const { data, error } = await client
       .from('messages')
@@ -179,59 +263,90 @@
       .order('created_at', { ascending: false })
       .limit(80);
 
-    loadingLine && loadingLine.remove();
+    document.getElementById('loading-line')?.remove();
 
-    if (error) {
-      const e = document.createElement('div');
-      e.className = 'status-line';
-      e.style.color = '#c06060';
-      e.textContent = 'load error: ' + error.message;
-      messagesEl.appendChild(e);
-      return;
-    }
-    if (!data.length) {
-      const e = document.createElement('div');
-      e.className = 'status-line';
-      e.textContent = 'no messages yet';
-      messagesEl.appendChild(e);
-    } else {
-      [...data].reverse().forEach(appendMessage);
-    }
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    if (error) { statusLine('load error: ' + error.message, '#c06060'); return; }
+    if (!data.length) { statusLine('no messages yet'); return; }
+    [...data].reverse().forEach(appendMessage);
+    scrollToBottom();
   }
 
+  // ── Realtime ───────────────────────────────────────────
   function subscribeRealtime() {
     client.channel('public:messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: msg }) => {
-        const wasBottom = messagesEl.scrollHeight - messagesEl.clientHeight - messagesEl.scrollTop < 60;
+        const snap = nearBottom();
         appendMessage(msg);
-        if (wasBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+        if (snap) scrollToBottom();
       })
       .subscribe(status => {
         statusDot.classList.toggle('online', status === 'SUBSCRIBED');
       });
   }
 
+  // ── Send text ──────────────────────────────────────────
   async function sendMessage() {
     const content = msgInput.value.trim();
     if (!content) return;
-    sendBtn.disabled = true;
+
     msgInput.value = '';
     msgInput.style.height = 'auto';
-    const { error } = await client.from('messages').insert({ username: currentUser, content });
+    sendBtn.disabled = true;
+
+    if (content === '/clear') {
+      await client.from('messages').insert({ username: currentUser, message: CLEAR_MSG });
+      sendBtn.disabled = false;
+      msgInput.focus();
+      return;
+    }
+
+    const { error } = await client.from('messages').insert({ username: currentUser, message: content });
     if (error) {
       msgInput.value = content;
-      const e = document.createElement('div');
-      e.className = 'status-line';
-      e.style.color = '#c06060';
-      e.textContent = 'send failed: ' + error.message;
-      messagesEl.appendChild(e);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      statusLine('send failed: ' + error.message, '#c06060');
     }
     sendBtn.disabled = false;
     msgInput.focus();
   }
 
+  // ── Send image ─────────────────────────────────────────
+  imgBtn.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    fileInput.value = '';
+
+    const ext   = file.name.split('.').pop();
+    const path  = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+    // optimistic placeholder
+    const placeholder = statusLine('\u23f3 uploading image\u2026');
+
+    const { data: uploadData, error: uploadErr } = await client.storage
+      .from(IMAGE_BUCKET)
+      .upload(path, file, { contentType: file.type });
+
+    if (uploadErr) {
+      placeholder.textContent = 'upload failed: ' + uploadErr.message;
+      placeholder.style.color = '#c06060';
+      return;
+    }
+
+    const { data: urlData } = client.storage.from(IMAGE_BUCKET).getPublicUrl(path);
+    const publicUrl = urlData.publicUrl;
+
+    placeholder.remove();
+
+    const { error: msgErr } = await client.from('messages').insert({
+      username: currentUser,
+      message: IMG_PREFIX + publicUrl
+    });
+
+    if (msgErr) statusLine('failed to send image: ' + msgErr.message, '#c06060');
+  });
+
+  // ── Input handling ─────────────────────────────────────
   msgInput.addEventListener('input', () => {
     msgInput.style.height = 'auto';
     msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
