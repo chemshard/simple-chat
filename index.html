@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Chat</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+</head>
+<body>
+
+<h2>Simple Chat</h2>
+
+<input id="username" placeholder="Name"><br><br>
+
+<div id="messages" style="height:300px;overflow:auto;border:1px solid black"></div>
+
+<br>
+
+<input id="message" placeholder="Message">
+<button onclick="sendMessage()">Send</button>
+
+<script>
+const supabase = window.supabase.createClient(
+  'uagbptlwxrmfdqtpbmwz',
+  'sb_publishable_sRFMv-I1VWmilcCA8STbug_3xZcN4Y_'
+);
+
+async function loadMessages() {
+  let { data } = await supabase
+    .from('messages')
+    .select('*')
+    .order('created_at', { ascending: true });
+
+  const div = document.getElementById('messages');
+  div.innerHTML = '';
+
+  data.forEach(msg => {
+    div.innerHTML += `<p><b>${msg.username}:</b> ${msg.message}</p>`;
+  });
+
+  div.scrollTop = div.scrollHeight;
+}
+
+async function sendMessage() {
+  const username = document.getElementById('username').value;
+  const message = document.getElementById('message').value;
+
+  await supabase
+    .from('messages')
+    .insert([{ username, message }]);
+
+  document.getElementById('message').value = '';
+  loadMessages();
+}
+
+setInterval(loadMessages, 2000);
+loadMessages();
+</script>
+
+</body>
+</html>
