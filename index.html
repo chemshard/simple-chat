@@ -252,8 +252,31 @@
   }
 
   async function deleteAllMessages() {
-    await client.from('messages').delete().gte('id', 0);
-  }
+	  // 1. Fetch all image messages before deleting
+	  const { data: imgMsgs } = await client
+	    .from('messages')
+	    .select('message')
+	    .like('message', IMG_PREFIX + '%');
+
+	  // 2. Extract storage paths from the public URLs
+	  if (imgMsgs && imgMsgs.length) {
+	    const paths = imgMsgs
+	      .map(row => {
+	        const url = row.message.slice(IMG_PREFIX.length);
+	        const marker = `/object/public/${IMAGE_BUCKET}/`;
+	        const idx = url.indexOf(marker);
+	        return idx !== -1 ? url.slice(idx + marker.length) : null;
+	      })
+	      .filter(Boolean);
+
+	    if (paths.length) {
+	      await client.storage.from(IMAGE_BUCKET).remove(paths);
+	    }
+	  }
+
+	  // 3. Delete all message rows
+	  await client.from('messages').delete().gte('id', 0);
+	}
 
   // ── Load history ───────────────────────────────────────
   async function loadHistory() {
