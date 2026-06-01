@@ -4,14 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>chat</title>
-  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
       --bg: #0c0c0c; --surface: #141414; --border: #252525;
       --text: #e8e4dc; --muted: #5a5650; --accent: #c9a84c;
       --accent-dim: #7a6028; --self-bg: #1a1710;
-      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font: Consolas, 'Cascadia Code', Menlo, 'Courier New', monospace;
       --radius: 6px;
     }
     html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 13px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
@@ -73,6 +72,38 @@
     #lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.85); z-index: 200; align-items: center; justify-content: center; cursor: zoom-out; }
     #lightbox.open { display: flex; }
     #lightbox img { max-width: 90vw; max-height: 90vh; border-radius: var(--radius); }
+
+    /* reply */
+    .reply-bar { display: none; align-items: center; gap: 8px; padding: 8px 20px; background: var(--surface); border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); flex-shrink: 0; }
+    .reply-bar.active { display: flex; }
+    .reply-bar-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .reply-bar-text strong { color: var(--accent); }
+    .reply-cancel { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 4px; line-height: 1; }
+    .reply-cancel:hover { color: var(--text); }
+    .msg-reply { background: var(--surface); border-left: 2px solid var(--accent-dim); border-radius: 3px; padding: 4px 8px; margin-bottom: 4px; font-size: 11px; color: var(--muted); }
+    .msg-reply strong { color: var(--accent); display: block; margin-bottom: 2px; font-size: 10px; }
+    .msg-reply span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 400px; }
+    .reply-btn { display: none; background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); padding: 2px 6px; font-size: 10px; cursor: pointer; margin-top: 4px; font-family: var(--font); letter-spacing: .04em; }
+    .reply-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+    .msg:hover .reply-btn { display: inline-block; }
+
+    /* edit button */
+    .msg-actions { display: inline; }
+    .edit-btn { display: none; background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); padding: 2px 6px; font-size: 10px; cursor: pointer; margin-top: 4px; margin-left: 4px; font-family: var(--font); letter-spacing: .04em; }
+    .edit-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+    .msg.self:hover .edit-btn { display: inline-block; }
+    .edited-tag { font-size: 10px; color: var(--muted); margin-left: 4px; display: none; font-style: italic; }
+    .edited-tag.visible { display: inline; }
+
+    /* inline edit mode */
+    .edit-textarea { width: 100%; background: var(--surface); border: 1px solid var(--accent-dim); border-radius: var(--radius); color: var(--text); font-family: var(--font); font-size: 13px; padding: 6px 8px; resize: none; outline: none; line-height: 1.6; margin-top: 4px; max-height: 120px; }
+    .edit-textarea:focus { border-color: var(--accent); }
+    .edit-actions { display: flex; gap: 6px; margin-top: 6px; }
+    .edit-save, .edit-cancel-btn { background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); font-family: var(--font); font-size: 11px; padding: 3px 10px; cursor: pointer; letter-spacing: .04em; transition: background .15s, border-color .15s, color .15s; }
+    .edit-save { border-color: var(--accent-dim); color: var(--accent); }
+    .edit-save:hover { background: var(--self-bg); border-color: var(--accent); }
+    .edit-cancel-btn:hover { color: var(--text); border-color: var(--muted); }
+    .edit-save:disabled { opacity: .5; cursor: default; }
   </style>
 </head>
 <body>
@@ -96,6 +127,10 @@
     <span class="header-user" id="header-user"></span>
   </header>
   <div id="messages"><div class="status-line" id="loading-line">connecting&hellip;</div></div>
+  <div id="reply-bar">
+    <span class="reply-bar-text">↩ replying to <strong id="reply-bar-user"></strong>: <span id="reply-bar-preview"></span></span>
+    <button class="reply-cancel" id="reply-cancel" title="cancel reply">✕</button>
+  </div>
   <div id="input-area">
     <input id="file-input" type="file" accept="image/*" />
     <button class="icon-btn" id="img-btn" title="send image">
@@ -108,11 +143,12 @@
 
 <div id="lightbox"><img id="lightbox-img" src="" alt="" /></div>
 
+<script src="supabase.js"></script>
 <script>
   // ── CONFIG ─────────────────────────────────────────────
   const SUPABASE_URL      = 'https://uagbptlwxrmfdqtpbmwz.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVhZ2JwdGx3eHJtZmRxdHBibXd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyNzYyOTgsImV4cCI6MjA5NTg1MjI5OH0.oM94DGrGOng9x9XqQdxS-W8UkQRhRyMxAjcCxbhcdss';
-  const IMAGE_BUCKET      = 'chat-images';   // storage bucket name
+  const IMAGE_BUCKET      = 'chat-images';
   // ───────────────────────────────────────────────────────
 
   const IMG_PREFIX = 'img::';
@@ -134,6 +170,9 @@
   const lightboxImg   = document.getElementById('lightbox-img');
 
   let client, currentUser, lastDate;
+  let replyingTo = null;
+  const msgMap = new Map();
+  const domMap = new Map(); // id -> row element
 
   // ── Auth ───────────────────────────────────────────────
   function showError(msg) {
@@ -198,10 +237,11 @@
   function appendMessage(msg) {
     if (msg.message === CLEAR_MSG) {
       clearUI();
-      // sender also deletes all rows
       if (msg.username === currentUser) deleteAllMessages();
       return;
     }
+
+    if (msg.id) msgMap.set(msg.id, msg);
 
     const dateLabel = fmtDate(msg.created_at);
     if (dateLabel !== lastDate) {
@@ -216,13 +256,32 @@
     const row = document.createElement('div');
     row.className = 'msg' + (msg.username === currentUser ? ' self' : '');
 
-    let bodyHtml;
-    if (isImg) {
-      const url = esc(msg.message.slice(IMG_PREFIX.length));
-      bodyHtml = `<img src="${url}" alt="image" loading="lazy" />`;
-    } else {
-      bodyHtml = esc(msg.message);
+    let bodyHtml = '';
+
+    // reply quote
+    if (msg.reply_to_id) {
+      const orig = msgMap.get(msg.reply_to_id);
+      if (orig) {
+        const preview = orig.message.startsWith(IMG_PREFIX) ? '[image]' : esc(orig.message).slice(0, 80);
+        bodyHtml += `<div class="msg-reply"><strong>↩ ${esc(orig.username)}</strong><span>${preview}</span></div>`;
+      } else {
+        bodyHtml += `<div class="msg-reply"><strong>↩ original message</strong><span>[unavailable]</span></div>`;
+      }
     }
+
+    if (isImg) {
+      bodyHtml += `<img src="${esc(msg.message.slice(IMG_PREFIX.length))}" alt="image" loading="lazy" />`;
+    } else {
+      bodyHtml += `<span class="msg-text">${esc(msg.message)}</span><span class="edited-tag">edited</span>`;
+    }
+
+    const isSelf = msg.username === currentUser;
+    bodyHtml += `<div class="msg-actions">`;
+    bodyHtml += `<button class="reply-btn" data-id="${msg.id}">↩ reply</button>`;
+    if (isSelf && !isImg) {
+      bodyHtml += `<button class="edit-btn" data-id="${msg.id}">✎ edit</button>`;
+    }
+    bodyHtml += `</div>`;
 
     row.innerHTML = `
       <div class="msg-meta">
@@ -231,54 +290,172 @@
       </div>
       <div class="msg-body">${bodyHtml}</div>`;
     messagesEl.appendChild(row);
+    if (msg.id) domMap.set(msg.id, row);
 
-    // lightbox on image click
     if (isImg) {
       row.querySelector('img').addEventListener('click', e => {
         lightboxImg.src = e.target.src;
         lightbox.classList.add('open');
       });
     }
+
+    row.querySelector('.reply-btn')?.addEventListener('click', () => setReply(msg));
+
+    if (msg.username === currentUser && !isImg && msg.id) {
+      row.querySelector('.edit-btn')?.addEventListener('click', () => startEdit(msg, row));
+    }
   }
 
   lightbox.addEventListener('click', () => lightbox.classList.remove('open'));
+
+  // ── Edit message ───────────────────────────────────────
+  function startEdit(msg, row) {
+    const bodyEl   = row.querySelector('.msg-body');
+    const textEl   = bodyEl.querySelector('.msg-text');
+    const actionsEl = bodyEl.querySelector('.msg-actions');
+    const editedTag = bodyEl.querySelector('.edited-tag');
+    if (!textEl || bodyEl.querySelector('.edit-textarea')) return; // already editing
+
+    const original = msg.message;
+    textEl.style.display = 'none';
+    if (editedTag) editedTag.style.display = 'none';
+    actionsEl.style.display = 'none';
+
+    const ta = document.createElement('textarea');
+    ta.className = 'edit-textarea';
+    ta.value = original;
+    ta.rows = 1;
+    ta.maxLength = 1000;
+    bodyEl.insertBefore(ta, actionsEl);
+
+    // auto-size
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+    ta.addEventListener('input', () => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+    });
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'edit-actions';
+    btnRow.innerHTML = `<button class="edit-save">save</button><button class="edit-cancel-btn">cancel</button>`;
+    bodyEl.insertBefore(btnRow, actionsEl);
+
+    const saveBtn   = btnRow.querySelector('.edit-save');
+    const cancelBtn = btnRow.querySelector('.edit-cancel-btn');
+
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+
+    function closeEdit() {
+      ta.remove();
+      btnRow.remove();
+      textEl.style.display = '';
+      if (editedTag) editedTag.style.display = '';
+      actionsEl.style.display = '';
+    }
+
+    cancelBtn.addEventListener('click', closeEdit);
+
+    ta.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); closeEdit(); }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveBtn.click(); }
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      const newText = ta.value.trim();
+      if (!newText || newText === original) { closeEdit(); return; }
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'saving…';
+      const { error } = await client.from('messages').update({ message: newText }).eq('id', msg.id);
+      if (error) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'save';
+        statusLine('edit failed: ' + error.message, '#c06060');
+        return;
+      }
+      // update local state
+      msg.message = newText;
+      msgMap.set(msg.id, msg);
+      textEl.textContent = newText;
+      if (editedTag) editedTag.classList.add('visible');
+      closeEdit();
+    });
+  }
+
+  // ── Apply remote edit to DOM ───────────────────────────
+  function applyEdit(updatedMsg) {
+    msgMap.set(updatedMsg.id, updatedMsg);
+    const row = domMap.get(updatedMsg.id);
+    if (!row) return;
+    const textEl   = row.querySelector('.msg-text');
+    const editedTag = row.querySelector('.edited-tag');
+    // close any open edit UI first
+    const ta      = row.querySelector('.edit-textarea');
+    const btnRow  = row.querySelector('.edit-actions');
+    if (ta)     ta.remove();
+    if (btnRow) btnRow.remove();
+    if (textEl) {
+      textEl.style.display = '';
+      textEl.textContent = updatedMsg.message;
+    }
+    row.querySelector('.msg-actions').style.display = '';
+    if (editedTag) { editedTag.style.display = ''; editedTag.classList.add('visible'); }
+  }
+
+  // ── Reply bar ──────────────────────────────────────────
+  const replyBar     = document.getElementById('reply-bar');
+  const replyBarUser = document.getElementById('reply-bar-user');
+  const replyBarPrev = document.getElementById('reply-bar-preview');
+  document.getElementById('reply-cancel').addEventListener('click', clearReply);
+
+  function setReply(msg) {
+    replyingTo = msg;
+    replyBarUser.textContent = msg.username;
+    replyBarPrev.textContent = msg.message.startsWith(IMG_PREFIX) ? '[image]' : msg.message.slice(0, 60);
+    replyBar.classList.add('active');
+    msgInput.focus();
+  }
+
+  function clearReply() {
+    replyingTo = null;
+    replyBar.classList.remove('active');
+  }
 
   // ── Clear ──────────────────────────────────────────────
   function clearUI() {
     messagesEl.innerHTML = '';
     lastDate = null;
+    msgMap.clear();
     statusLine('chat cleared');
   }
 
-async function deleteAllMessages() {
-  const { data: imgMsgs, error: fetchErr } = await client
-    .from('messages')
-    .select('message')
-    .like('message', IMG_PREFIX + '%');
+  async function deleteAllMessages() {
+    const { data: imgMsgs, error: fetchErr } = await client
+      .from('messages')
+      .select('message')
+      .like('message', IMG_PREFIX + '%');
 
-  if (fetchErr) { console.error('fetch img msgs failed:', fetchErr); }
+    if (fetchErr) { console.error('fetch img msgs failed:', fetchErr); }
 
-  if (imgMsgs && imgMsgs.length) {
-    const paths = imgMsgs
-      .map(row => {
-        const url = row.message.slice(IMG_PREFIX.length);
-        const marker = `/object/public/${IMAGE_BUCKET}/`;
-        const idx = url.indexOf(marker);
-        return idx !== -1 ? url.slice(idx + marker.length) : null;
-      })
-      .filter(Boolean);
+    if (imgMsgs && imgMsgs.length) {
+      const paths = imgMsgs
+        .map(row => {
+          const url = row.message.slice(IMG_PREFIX.length);
+          const marker = `/object/public/${IMAGE_BUCKET}/`;
+          const idx = url.indexOf(marker);
+          return idx !== -1 ? url.slice(idx + marker.length) : null;
+        })
+        .filter(Boolean);
 
-    console.log('paths to delete:', paths);  // <-- check this
+      if (paths.length) {
+        const { error: delErr } = await client.storage.from(IMAGE_BUCKET).remove(paths);
+        if (delErr) console.error('storage delete failed:', delErr);
+      }
+    }
 
-    const { data, error: delErr } = await client.storage
-      .from(IMAGE_BUCKET)
-      .remove(paths);
-
-    console.log('storage delete result:', data, delErr);  // <-- and this
+    await client.from('messages').delete().gte('id', 0);
   }
-
-  await client.from('messages').delete().gte('id', 0);
-}
 
   // ── Load history ───────────────────────────────────────
   async function loadHistory() {
@@ -304,6 +481,9 @@ async function deleteAllMessages() {
         appendMessage(msg);
         if (snap) scrollToBottom();
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, ({ new: msg }) => {
+        applyEdit(msg);
+      })
       .subscribe(status => {
         statusDot.classList.toggle('online', status === 'SUBSCRIBED');
       });
@@ -325,7 +505,11 @@ async function deleteAllMessages() {
       return;
     }
 
-    const { error } = await client.from('messages').insert({ username: currentUser, message: content });
+    const payload = { username: currentUser, message: content };
+    if (replyingTo) payload.reply_to_id = replyingTo.id;
+    clearReply();
+
+    const { error } = await client.from('messages').insert(payload);
     if (error) {
       msgInput.value = content;
       statusLine('send failed: ' + error.message, '#c06060');
@@ -345,7 +529,6 @@ async function deleteAllMessages() {
     const ext   = file.name.split('.').pop();
     const path  = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-    // optimistic placeholder
     const placeholder = statusLine('\u23f3 uploading image\u2026');
 
     const { data: uploadData, error: uploadErr } = await client.storage
@@ -363,11 +546,11 @@ async function deleteAllMessages() {
 
     placeholder.remove();
 
-    const { error: msgErr } = await client.from('messages').insert({
-      username: currentUser,
-      message: IMG_PREFIX + publicUrl
-    });
+    const payload = { username: currentUser, message: IMG_PREFIX + publicUrl };
+    if (replyingTo) payload.reply_to_id = replyingTo.id;
+    clearReply();
 
+    const { error: msgErr } = await client.from('messages').insert(payload);
     if (msgErr) statusLine('failed to send image: ' + msgErr.message, '#c06060');
   });
 
