@@ -127,9 +127,9 @@
     <span class="header-user" id="header-user"></span>
   </header>
   <div id="messages"><div class="status-line" id="loading-line">connecting&hellip;</div></div>
-  <div id="reply-bar">
-    <span class="reply-bar-text">↩ replying to <strong id="reply-bar-user"></strong>: <span id="reply-bar-preview"></span></span>
-    <button class="reply-cancel" id="reply-cancel" title="cancel reply">✕</button>
+  <div id="reply-bar" class="reply-bar">
+    <span class="reply-bar-text">&#x21A9; replying to <strong id="reply-bar-user"></strong>: <span id="reply-bar-preview"></span></span>
+    <button class="reply-cancel" id="reply-cancel" title="cancel reply">&#x2715;</button>
   </div>
   <div id="input-area">
     <input id="file-input" type="file" accept="image/*" />
@@ -143,13 +143,12 @@
 
 <div id="lightbox"><img id="lightbox-img" src="" alt="" /></div>
 
-<script src="supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-  // ── CONFIG ─────────────────────────────────────────────
+  // CONFIG
   const SUPABASE_URL      = 'https://uagbptlwxrmfdqtpbmwz.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVhZ2JwdGx3eHJtZmRxdHBibXd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyNzYyOTgsImV4cCI6MjA5NTg1MjI5OH0.oM94DGrGOng9x9XqQdxS-W8UkQRhRyMxAjcCxbhcdss';
   const IMAGE_BUCKET      = 'chat-images';
-  // ───────────────────────────────────────────────────────
 
   const IMG_PREFIX = 'img::';
   const CLEAR_MSG  = '__clear__';
@@ -172,9 +171,9 @@
   let client, currentUser, lastDate;
   let replyingTo = null;
   const msgMap = new Map();
-  const domMap = new Map(); // id -> row element
+  const domMap = new Map();
 
-  // ── Auth ───────────────────────────────────────────────
+  // Auth
   function showError(msg) {
     loginError.textContent = msg;
     loginError.style.display = 'block';
@@ -200,13 +199,14 @@
       headerUser.textContent = name;
       await loadHistory();
       subscribeRealtime();
+      subscribePresence();
       msgInput.focus();
     } catch (err) {
       showError('error: ' + err.message);
     }
   }
 
-  // ── Helpers ────────────────────────────────────────────
+  // Helpers
   function esc(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
@@ -233,7 +233,7 @@
     return e;
   }
 
-  // ── Render message ─────────────────────────────────────
+  // Render message
   function appendMessage(msg) {
     if (msg.message === CLEAR_MSG) {
       clearUI();
@@ -252,43 +252,43 @@
       lastDate = dateLabel;
     }
 
-    const isImg = msg.message.startsWith(IMG_PREFIX);
-    const row = document.createElement('div');
-    row.className = 'msg' + (msg.username === currentUser ? ' self' : '');
+    const isImg  = msg.message.startsWith(IMG_PREFIX);
+    const isSelf = msg.username === currentUser;
+    const row    = document.createElement('div');
+    row.className = 'msg' + (isSelf ? ' self' : '');
 
     let bodyHtml = '';
 
-    // reply quote
     if (msg.reply_to_id) {
       const orig = msgMap.get(msg.reply_to_id);
       if (orig) {
         const preview = orig.message.startsWith(IMG_PREFIX) ? '[image]' : esc(orig.message).slice(0, 80);
-        bodyHtml += `<div class="msg-reply"><strong>↩ ${esc(orig.username)}</strong><span>${preview}</span></div>`;
+        bodyHtml += '<div class="msg-reply"><strong>\u21A9 ' + esc(orig.username) + '</strong><span>' + preview + '</span></div>';
       } else {
-        bodyHtml += `<div class="msg-reply"><strong>↩ original message</strong><span>[unavailable]</span></div>`;
+        bodyHtml += '<div class="msg-reply"><strong>\u21A9 original message</strong><span>[unavailable]</span></div>';
       }
     }
 
     if (isImg) {
-      bodyHtml += `<img src="${esc(msg.message.slice(IMG_PREFIX.length))}" alt="image" loading="lazy" />`;
+      bodyHtml += '<img src="' + esc(msg.message.slice(IMG_PREFIX.length)) + '" alt="image" loading="lazy" />';
     } else {
-      bodyHtml += `<span class="msg-text">${esc(msg.message)}</span><span class="edited-tag">edited</span>`;
+      bodyHtml += '<span class="msg-text">' + esc(msg.message) + '</span><span class="edited-tag">edited</span>';
     }
 
-    const isSelf = msg.username === currentUser;
-    bodyHtml += `<div class="msg-actions">`;
-    bodyHtml += `<button class="reply-btn" data-id="${msg.id}">↩ reply</button>`;
+    bodyHtml += '<div class="msg-actions">';
+    bodyHtml += '<button class="reply-btn" data-id="' + msg.id + '">\u21A9 reply</button>';
     if (isSelf && !isImg) {
-      bodyHtml += `<button class="edit-btn" data-id="${msg.id}">✎ edit</button>`;
+      bodyHtml += '<button class="edit-btn" data-id="' + msg.id + '">\u270E edit</button>';
     }
-    bodyHtml += `</div>`;
+    bodyHtml += '</div>';
 
-    row.innerHTML = `
-      <div class="msg-meta">
-        <span class="msg-user">${esc(msg.username)}</span>
-        <span class="msg-time">${fmtTime(msg.created_at)}</span>
-      </div>
-      <div class="msg-body">${bodyHtml}</div>`;
+    row.innerHTML =
+      '<div class="msg-meta">' +
+        '<span class="msg-user">' + esc(msg.username) + '</span>' +
+        '<span class="msg-time">' + fmtTime(msg.created_at) + '</span>' +
+      '</div>' +
+      '<div class="msg-body">' + bodyHtml + '</div>';
+
     messagesEl.appendChild(row);
     if (msg.id) domMap.set(msg.id, row);
 
@@ -299,22 +299,22 @@
       });
     }
 
-    row.querySelector('.reply-btn')?.addEventListener('click', () => setReply(msg));
+    row.querySelector('.reply-btn').addEventListener('click', () => setReply(msg));
 
-    if (msg.username === currentUser && !isImg && msg.id) {
-      row.querySelector('.edit-btn')?.addEventListener('click', () => startEdit(msg, row));
+    if (isSelf && !isImg && msg.id) {
+      row.querySelector('.edit-btn').addEventListener('click', () => startEdit(msg, row));
     }
   }
 
   lightbox.addEventListener('click', () => lightbox.classList.remove('open'));
 
-  // ── Edit message ───────────────────────────────────────
+  // Edit message
   function startEdit(msg, row) {
-    const bodyEl   = row.querySelector('.msg-body');
-    const textEl   = bodyEl.querySelector('.msg-text');
+    const bodyEl    = row.querySelector('.msg-body');
+    const textEl    = bodyEl.querySelector('.msg-text');
     const actionsEl = bodyEl.querySelector('.msg-actions');
     const editedTag = bodyEl.querySelector('.edited-tag');
-    if (!textEl || bodyEl.querySelector('.edit-textarea')) return; // already editing
+    if (!textEl || bodyEl.querySelector('.edit-textarea')) return;
 
     const original = msg.message;
     textEl.style.display = 'none';
@@ -328,7 +328,6 @@
     ta.maxLength = 1000;
     bodyEl.insertBefore(ta, actionsEl);
 
-    // auto-size
     ta.style.height = 'auto';
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
     ta.addEventListener('input', () => {
@@ -338,7 +337,7 @@
 
     const btnRow = document.createElement('div');
     btnRow.className = 'edit-actions';
-    btnRow.innerHTML = `<button class="edit-save">save</button><button class="edit-cancel-btn">cancel</button>`;
+    btnRow.innerHTML = '<button class="edit-save">save</button><button class="edit-cancel-btn">cancel</button>';
     bodyEl.insertBefore(btnRow, actionsEl);
 
     const saveBtn   = btnRow.querySelector('.edit-save');
@@ -356,7 +355,6 @@
     }
 
     cancelBtn.addEventListener('click', closeEdit);
-
     ta.addEventListener('keydown', e => {
       if (e.key === 'Escape') { e.preventDefault(); closeEdit(); }
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveBtn.click(); }
@@ -366,7 +364,7 @@
       const newText = ta.value.trim();
       if (!newText || newText === original) { closeEdit(); return; }
       saveBtn.disabled = true;
-      saveBtn.textContent = 'saving…';
+      saveBtn.textContent = 'saving\u2026';
       const { error } = await client.from('messages').update({ message: newText }).eq('id', msg.id);
       if (error) {
         saveBtn.disabled = false;
@@ -374,7 +372,6 @@
         statusLine('edit failed: ' + error.message, '#c06060');
         return;
       }
-      // update local state
       msg.message = newText;
       msgMap.set(msg.id, msg);
       textEl.textContent = newText;
@@ -383,27 +380,23 @@
     });
   }
 
-  // ── Apply remote edit to DOM ───────────────────────────
+  // Apply remote edit to DOM
   function applyEdit(updatedMsg) {
     msgMap.set(updatedMsg.id, updatedMsg);
     const row = domMap.get(updatedMsg.id);
     if (!row) return;
-    const textEl   = row.querySelector('.msg-text');
+    const textEl    = row.querySelector('.msg-text');
     const editedTag = row.querySelector('.edited-tag');
-    // close any open edit UI first
-    const ta      = row.querySelector('.edit-textarea');
-    const btnRow  = row.querySelector('.edit-actions');
+    const ta        = row.querySelector('.edit-textarea');
+    const btnRow    = row.querySelector('.edit-actions');
     if (ta)     ta.remove();
     if (btnRow) btnRow.remove();
-    if (textEl) {
-      textEl.style.display = '';
-      textEl.textContent = updatedMsg.message;
-    }
+    if (textEl) { textEl.style.display = ''; textEl.textContent = updatedMsg.message; }
     row.querySelector('.msg-actions').style.display = '';
     if (editedTag) { editedTag.style.display = ''; editedTag.classList.add('visible'); }
   }
 
-  // ── Reply bar ──────────────────────────────────────────
+  // Reply bar
   const replyBar     = document.getElementById('reply-bar');
   const replyBarUser = document.getElementById('reply-bar-user');
   const replyBarPrev = document.getElementById('reply-bar-preview');
@@ -422,11 +415,12 @@
     replyBar.classList.remove('active');
   }
 
-  // ── Clear ──────────────────────────────────────────────
+  // Clear
   function clearUI() {
     messagesEl.innerHTML = '';
     lastDate = null;
     msgMap.clear();
+    domMap.clear();
     statusLine('chat cleared');
   }
 
@@ -442,7 +436,7 @@
       const paths = imgMsgs
         .map(row => {
           const url = row.message.slice(IMG_PREFIX.length);
-          const marker = `/object/public/${IMAGE_BUCKET}/`;
+          const marker = '/object/public/' + IMAGE_BUCKET + '/';
           const idx = url.indexOf(marker);
           return idx !== -1 ? url.slice(idx + marker.length) : null;
         })
@@ -457,7 +451,7 @@
     await client.from('messages').delete().gte('id', 0);
   }
 
-  // ── Load history ───────────────────────────────────────
+  // Load history
   async function loadHistory() {
     const { data, error } = await client
       .from('messages')
@@ -473,7 +467,7 @@
     scrollToBottom();
   }
 
-  // ── Realtime ───────────────────────────────────────────
+  // Realtime (messages)
   function subscribeRealtime() {
     client.channel('public:messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: msg }) => {
@@ -489,7 +483,30 @@
       });
   }
 
-  // ── Send text ──────────────────────────────────────────
+  // Presence (join / leave)
+  function subscribePresence() {
+    const presence = client.channel('chat-presence');
+    presence
+      .on('presence', { event: 'join' }, ({ newPresences }) => {
+        newPresences.forEach(p => {
+          if (p.username !== currentUser) {
+            statusLine('\u2192 ' + p.username + ' joined', '#8eb87a');
+          }
+        });
+      })
+      .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+        leftPresences.forEach(p => {
+          statusLine('\u2190 ' + p.username + ' left');
+        });
+      })
+      .subscribe(async status => {
+        if (status === 'SUBSCRIBED') {
+          await presence.track({ username: currentUser });
+        }
+      });
+  }
+
+  // Send text
   async function sendMessage() {
     const content = msgInput.value.trim();
     if (!content) return;
@@ -518,7 +535,7 @@
     msgInput.focus();
   }
 
-  // ── Send image ─────────────────────────────────────────
+  // Send image
   imgBtn.addEventListener('click', () => fileInput.click());
 
   fileInput.addEventListener('change', async () => {
@@ -526,12 +543,12 @@
     if (!file) return;
     fileInput.value = '';
 
-    const ext   = file.name.split('.').pop();
-    const path  = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const ext  = file.name.split('.').pop();
+    const path = Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + ext;
 
-    const placeholder = statusLine('\u23f3 uploading image\u2026');
+    const placeholder = statusLine('\u23F3 uploading image\u2026');
 
-    const { data: uploadData, error: uploadErr } = await client.storage
+    const { error: uploadErr } = await client.storage
       .from(IMAGE_BUCKET)
       .upload(path, file, { contentType: file.type });
 
@@ -554,7 +571,7 @@
     if (msgErr) statusLine('failed to send image: ' + msgErr.message, '#c06060');
   });
 
-  // ── Input handling ─────────────────────────────────────
+  // Input handling
   msgInput.addEventListener('input', () => {
     msgInput.style.height = 'auto';
     msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
