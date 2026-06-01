@@ -546,37 +546,49 @@
 
     // ── Join ──────────────────────────────────
     function validateConfig() {
-      return SUPABASE_URL !== 'https://uagbptlwxrmfdqtpbmwz.supabase.co' &&
-             SUPABASE_ANON_KEY !== 'sb_publishable_sRFMv-I1VWmilcCA8STbug_3xZcN4Y_';
+      return SUPABASE_URL !== 'https://YOUR_PROJECT_ID.supabase.co' &&
+             SUPABASE_ANON_KEY !== 'YOUR_ANON_KEY';
     }
 
     joinBtn.addEventListener('click', join);
     usernameInput.addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
 
+    function showLoginError(msg) {
+      loginError.textContent = msg;
+      loginError.style.display = 'block';
+    }
+
     async function join() {
       const name = usernameInput.value.trim();
       if (!name) {
-        loginError.style.display = 'block';
+        showLoginError('please enter a username');
+        return;
+      }
+      if (!validateConfig()) {
+        showLoginError('replace SUPABASE_URL and SUPABASE_ANON_KEY in the source');
+        return;
+      }
+      if (!window.supabase) {
+        showLoginError('supabase library not loaded — check your connection and try again');
         return;
       }
       loginError.style.display = 'none';
-
-      if (!validateConfig()) {
-        loginError.textContent = 'replace SUPABASE_URL and SUPABASE_ANON_KEY in the source';
-        loginError.style.display = 'block';
-        return;
+      joinBtn.disabled = true;
+      joinBtn.textContent = 'connecting…';
+      try {
+        currentUser = name;
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        loginScreen.classList.add('hidden');
+        app.classList.add('visible');
+        headerUser.textContent = name;
+        await loadHistory();
+        subscribeRealtime();
+        msgInput.focus();
+      } catch (err) {
+        joinBtn.disabled = false;
+        joinBtn.textContent = 'join →';
+        showLoginError('connection failed: ' + err.message);
       }
-
-      currentUser = name;
-      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-      loginScreen.classList.add('hidden');
-      app.classList.add('visible');
-      headerUser.textContent = name;
-
-      await loadHistory();
-      subscribeRealtime();
-      msgInput.focus();
     }
   </script>
 </body>
