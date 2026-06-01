@@ -50,7 +50,6 @@
     .msg-body { padding: 3px 10px 3px 0; word-break: break-word; white-space: pre-wrap; }
     .msg-body img { display: block; max-width: 280px; max-height: 320px; border-radius: var(--radius); margin-top: 4px; cursor: pointer; border: 1px solid var(--border); }
     .msg-body img:hover { border-color: var(--accent-dim); }
-    .uploading { color: var(--muted); font-style: italic; }
 
     .date-divider { display: flex; align-items: center; gap: 10px; margin: 12px 0 8px; color: var(--muted); font-size: 10px; letter-spacing: .08em; }
     .date-divider::before, .date-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
@@ -73,25 +72,28 @@
     #lightbox.open { display: flex; }
     #lightbox img { max-width: 90vw; max-height: 90vh; border-radius: var(--radius); }
 
-    /* reply */
+    /* reply bar */
     .reply-bar { display: none; align-items: center; gap: 8px; padding: 8px 20px; background: var(--surface); border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); flex-shrink: 0; }
     .reply-bar.active { display: flex; }
     .reply-bar-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .reply-bar-text strong { color: var(--accent); }
     .reply-cancel { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 4px; line-height: 1; }
     .reply-cancel:hover { color: var(--text); }
+
+    /* reply quote */
     .msg-reply { background: var(--surface); border-left: 2px solid var(--accent-dim); border-radius: 3px; padding: 4px 8px; margin-bottom: 4px; font-size: 11px; color: var(--muted); }
     .msg-reply strong { color: var(--accent); display: block; margin-bottom: 2px; font-size: 10px; }
     .msg-reply span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 400px; }
-    .reply-btn { display: none; background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); padding: 2px 6px; font-size: 10px; cursor: pointer; margin-top: 4px; font-family: var(--font); letter-spacing: .04em; }
-    .reply-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
-    .msg:hover .reply-btn { display: inline-block; }
 
-    /* edit button */
-    .msg-actions { display: inline; }
-    .edit-btn { display: none; background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); padding: 2px 6px; font-size: 10px; cursor: pointer; margin-top: 4px; margin-left: 4px; font-family: var(--font); letter-spacing: .04em; }
-    .edit-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+    /* message action buttons */
+    .msg-actions { display: inline; position: relative; }
+    .reply-btn, .edit-btn, .react-btn { display: none; background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); padding: 2px 6px; font-size: 10px; cursor: pointer; margin-top: 4px; margin-left: 4px; font-family: var(--font); letter-spacing: .04em; transition: color .12s, border-color .12s; }
+    .reply-btn:hover, .edit-btn:hover, .react-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
+    .msg:hover .reply-btn,
+    .msg:hover .react-btn { display: inline-block; }
     .msg.self:hover .edit-btn { display: inline-block; }
+
+    /* edited tag */
     .edited-tag { font-size: 10px; color: var(--muted); margin-left: 4px; display: none; font-style: italic; }
     .edited-tag.visible { display: inline; }
 
@@ -104,6 +106,17 @@
     .edit-save:hover { background: var(--self-bg); border-color: var(--accent); }
     .edit-cancel-btn:hover { color: var(--text); border-color: var(--muted); }
     .edit-save:disabled { opacity: .5; cursor: default; }
+
+    /* emoji picker */
+    .emoji-picker { position: absolute; bottom: calc(100% + 4px); left: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px; display: flex; gap: 4px; flex-wrap: wrap; z-index: 50; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
+    .emoji-opt { background: none; border: none; font-size: 17px; cursor: pointer; padding: 3px 4px; border-radius: 4px; line-height: 1; transition: background .1s; }
+    .emoji-opt:hover { background: var(--border); }
+
+    /* reaction pills */
+    .reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; white-space: normal; }
+    .reaction-pill { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 1px 7px; font-size: 12px; cursor: pointer; color: var(--text); transition: border-color .12s, background .12s; line-height: 1.6; }
+    .reaction-pill:hover { border-color: var(--accent-dim); }
+    .reaction-pill.mine { border-color: var(--accent-dim); background: var(--self-bg); }
   </style>
 </head>
 <body>
@@ -149,9 +162,9 @@
   const SUPABASE_URL      = 'https://uagbptlwxrmfdqtpbmwz.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVhZ2JwdGx3eHJtZmRxdHBibXd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyNzYyOTgsImV4cCI6MjA5NTg1MjI5OH0.oM94DGrGOng9x9XqQdxS-W8UkQRhRyMxAjcCxbhcdss';
   const IMAGE_BUCKET      = 'chat-images';
-
-  const IMG_PREFIX = 'img::';
-  const CLEAR_MSG  = '__clear__';
+  const IMG_PREFIX        = 'img::';
+  const CLEAR_MSG         = '__clear__';
+  const EMOJIS            = ['👍','👎','❤️','😂','😮','😢','🔥','💯'];
 
   const loginScreen   = document.getElementById('login-screen');
   const usernameInput = document.getElementById('username-input');
@@ -170,10 +183,11 @@
 
   let client, currentUser, lastDate;
   let replyingTo = null;
-  const msgMap = new Map();
-  const domMap = new Map();
+  const msgMap       = new Map(); // id -> msg object
+  const domMap       = new Map(); // id -> row element
+  const reactionsMap = new Map(); // message_id -> Map(emoji -> Set(username))
 
-  // Auth
+  // ── Auth ───────────────────────────────────────────────
   function showError(msg) {
     loginError.textContent = msg;
     loginError.style.display = 'block';
@@ -206,13 +220,9 @@
     }
   }
 
-  // Helpers
-  function esc(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-  function fmtTime(ts) {
-    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
+  // ── Helpers ────────────────────────────────────────────
+  function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function fmtTime(ts) { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
   function fmtDate(ts) {
     const d = new Date(ts), t = new Date();
     if (d.toDateString() === t.toDateString()) return 'today';
@@ -233,7 +243,22 @@
     return e;
   }
 
-  // Render message
+  // ── Tab notifications ──────────────────────────────────
+  let unread = 0;
+  const baseTitle = document.title;
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) { unread = 0; document.title = baseTitle; }
+  });
+
+  function bumpUnread() {
+    if (document.hidden) {
+      unread++;
+      document.title = '(' + unread + ') ' + baseTitle;
+    }
+  }
+
+  // ── Render message ─────────────────────────────────────
   function appendMessage(msg) {
     if (msg.message === CLEAR_MSG) {
       clearUI();
@@ -275,11 +300,10 @@
       bodyHtml += '<span class="msg-text">' + esc(msg.message) + '</span><span class="edited-tag">edited</span>';
     }
 
-    bodyHtml += '<div class="msg-actions">';
-    bodyHtml += '<button class="reply-btn" data-id="' + msg.id + '">\u21A9 reply</button>';
-    if (isSelf && !isImg) {
-      bodyHtml += '<button class="edit-btn" data-id="' + msg.id + '">\u270E edit</button>';
-    }
+    bodyHtml += '<div class="msg-actions" style="position:relative">';
+    bodyHtml += '<button class="reply-btn">\u21A9 reply</button>';
+    if (isSelf && !isImg) bodyHtml += '<button class="edit-btn">\u270E edit</button>';
+    bodyHtml += '<button class="react-btn">+ react</button>';
     bodyHtml += '</div>';
 
     row.innerHTML =
@@ -304,11 +328,99 @@
     if (isSelf && !isImg && msg.id) {
       row.querySelector('.edit-btn').addEventListener('click', () => startEdit(msg, row));
     }
+
+    if (msg.id) {
+      row.querySelector('.react-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        openPicker(msg.id, row.querySelector('.msg-actions'));
+      });
+    }
   }
 
   lightbox.addEventListener('click', () => lightbox.classList.remove('open'));
 
-  // Edit message
+  // ── Emoji picker ───────────────────────────────────────
+  function openPicker(msgId, actionsEl) {
+    document.querySelector('.emoji-picker')?.remove();
+    const picker = document.createElement('div');
+    picker.className = 'emoji-picker';
+    EMOJIS.forEach(emoji => {
+      const btn = document.createElement('button');
+      btn.className = 'emoji-opt';
+      btn.textContent = emoji;
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        toggleReaction(msgId, emoji);
+        picker.remove();
+      });
+      picker.appendChild(btn);
+    });
+    actionsEl.appendChild(picker);
+    setTimeout(() => document.addEventListener('click', () => picker.remove(), { once: true }), 0);
+  }
+
+  // ── Reactions data ─────────────────────────────────────
+  function getReactionMap(msgId) {
+    if (!reactionsMap.has(msgId)) reactionsMap.set(msgId, new Map());
+    return reactionsMap.get(msgId);
+  }
+
+  function applyReaction(msgId, emoji, username, add) {
+    const r = getReactionMap(msgId);
+    if (add) {
+      if (!r.has(emoji)) r.set(emoji, new Set());
+      r.get(emoji).add(username);
+    } else {
+      if (r.has(emoji)) {
+        r.get(emoji).delete(username);
+        if (r.get(emoji).size === 0) r.delete(emoji);
+      }
+    }
+    renderReactions(msgId);
+  }
+
+  function renderReactions(msgId) {
+    const row = domMap.get(msgId);
+    if (!row) return;
+    const r = getReactionMap(msgId);
+    let el = row.querySelector('.reactions');
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'reactions';
+      row.querySelector('.msg-body').appendChild(el);
+    }
+    el.innerHTML = '';
+    for (const [emoji, users] of r) {
+      if (!users.size) continue;
+      const pill = document.createElement('button');
+      pill.className = 'reaction-pill' + (users.has(currentUser) ? ' mine' : '');
+      pill.textContent = emoji + '\u2009' + users.size;
+      pill.title = [...users].join(', ');
+      pill.addEventListener('click', () => toggleReaction(msgId, emoji));
+      el.appendChild(pill);
+    }
+  }
+
+  async function toggleReaction(msgId, emoji) {
+    const r     = getReactionMap(msgId);
+    const users = r.get(emoji);
+    const hasIt = users && users.has(currentUser);
+    if (hasIt) {
+      await client.from('reactions').delete()
+        .eq('message_id', msgId).eq('username', currentUser).eq('emoji', emoji);
+    } else {
+      await client.from('reactions').insert({ message_id: msgId, username: currentUser, emoji });
+    }
+  }
+
+  async function loadReactions(messageIds) {
+    if (!messageIds.length) return;
+    const { data, error } = await client.from('reactions').select('*').in('message_id', messageIds);
+    if (error || !data) return;
+    data.forEach(r => applyReaction(r.message_id, r.emoji, r.username, true));
+  }
+
+  // ── Edit message ───────────────────────────────────────
   function startEdit(msg, row) {
     const bodyEl    = row.querySelector('.msg-body');
     const textEl    = bodyEl.querySelector('.msg-text');
@@ -347,8 +459,7 @@
     ta.setSelectionRange(ta.value.length, ta.value.length);
 
     function closeEdit() {
-      ta.remove();
-      btnRow.remove();
+      ta.remove(); btnRow.remove();
       textEl.style.display = '';
       if (editedTag) editedTag.style.display = '';
       actionsEl.style.display = '';
@@ -380,7 +491,6 @@
     });
   }
 
-  // Apply remote edit to DOM
   function applyEdit(updatedMsg) {
     msgMap.set(updatedMsg.id, updatedMsg);
     const row = domMap.get(updatedMsg.id);
@@ -396,7 +506,7 @@
     if (editedTag) { editedTag.style.display = ''; editedTag.classList.add('visible'); }
   }
 
-  // Reply bar
+  // ── Reply bar ──────────────────────────────────────────
   const replyBar     = document.getElementById('reply-bar');
   const replyBarUser = document.getElementById('reply-bar-user');
   const replyBarPrev = document.getElementById('reply-bar-preview');
@@ -415,65 +525,56 @@
     replyBar.classList.remove('active');
   }
 
-  // Clear
+  // ── Clear ──────────────────────────────────────────────
   function clearUI() {
     messagesEl.innerHTML = '';
     lastDate = null;
     msgMap.clear();
     domMap.clear();
+    reactionsMap.clear();
     statusLine('chat cleared');
   }
 
   async function deleteAllMessages() {
     const { data: imgMsgs, error: fetchErr } = await client
-      .from('messages')
-      .select('message')
-      .like('message', IMG_PREFIX + '%');
-
-    if (fetchErr) { console.error('fetch img msgs failed:', fetchErr); }
-
+      .from('messages').select('message').like('message', IMG_PREFIX + '%');
+    if (fetchErr) console.error('fetch img msgs failed:', fetchErr);
     if (imgMsgs && imgMsgs.length) {
-      const paths = imgMsgs
-        .map(row => {
-          const url = row.message.slice(IMG_PREFIX.length);
-          const marker = '/object/public/' + IMAGE_BUCKET + '/';
-          const idx = url.indexOf(marker);
-          return idx !== -1 ? url.slice(idx + marker.length) : null;
-        })
-        .filter(Boolean);
-
-      if (paths.length) {
-        const { error: delErr } = await client.storage.from(IMAGE_BUCKET).remove(paths);
-        if (delErr) console.error('storage delete failed:', delErr);
-      }
+      const paths = imgMsgs.map(row => {
+        const url = row.message.slice(IMG_PREFIX.length);
+        const marker = '/object/public/' + IMAGE_BUCKET + '/';
+        const idx = url.indexOf(marker);
+        return idx !== -1 ? url.slice(idx + marker.length) : null;
+      }).filter(Boolean);
+      if (paths.length) await client.storage.from(IMAGE_BUCKET).remove(paths);
     }
-
     await client.from('messages').delete().gte('id', 0);
   }
 
-  // Load history
+  // ── Load history ───────────────────────────────────────
   async function loadHistory() {
     const { data, error } = await client
-      .from('messages')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(80);
+      .from('messages').select('*')
+      .order('created_at', { ascending: false }).limit(80);
 
     document.getElementById('loading-line')?.remove();
-
     if (error) { statusLine('load error: ' + error.message, '#c06060'); return; }
     if (!data.length) { statusLine('no messages yet'); return; }
     [...data].reverse().forEach(appendMessage);
     scrollToBottom();
+
+    const ids = data.map(m => m.id).filter(Boolean);
+    await loadReactions(ids);
   }
 
-  // Realtime (messages)
+  // ── Realtime ───────────────────────────────────────────
   function subscribeRealtime() {
     client.channel('public:messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: msg }) => {
         const snap = nearBottom();
         appendMessage(msg);
         if (snap) scrollToBottom();
+        if (msg.username !== currentUser && msg.message !== CLEAR_MSG) bumpUnread();
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, ({ new: msg }) => {
         applyEdit(msg);
@@ -481,36 +582,38 @@
       .subscribe(status => {
         statusDot.classList.toggle('online', status === 'SUBSCRIBED');
       });
+
+    client.channel('public:reactions')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'reactions' }, ({ new: r }) => {
+        applyReaction(r.message_id, r.emoji, r.username, true);
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'reactions' }, ({ old: r }) => {
+        applyReaction(r.message_id, r.emoji, r.username, false);
+      })
+      .subscribe();
   }
 
-  // Presence (join / leave)
+  // ── Presence (join / leave) ────────────────────────────
   function subscribePresence() {
     const presence = client.channel('chat-presence');
     presence
       .on('presence', { event: 'join' }, ({ newPresences }) => {
         newPresences.forEach(p => {
-          if (p.username !== currentUser) {
-            statusLine('\u2192 ' + p.username + ' joined', '#8eb87a');
-          }
+          if (p.username !== currentUser) statusLine('\u2192 ' + p.username + ' joined', '#8eb87a');
         });
       })
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-        leftPresences.forEach(p => {
-          statusLine('\u2190 ' + p.username + ' left');
-        });
+        leftPresences.forEach(p => statusLine('\u2190 ' + p.username + ' left'));
       })
       .subscribe(async status => {
-        if (status === 'SUBSCRIBED') {
-          await presence.track({ username: currentUser });
-        }
+        if (status === 'SUBSCRIBED') await presence.track({ username: currentUser });
       });
   }
 
-  // Send text
+  // ── Send text ──────────────────────────────────────────
   async function sendMessage() {
     const content = msgInput.value.trim();
     if (!content) return;
-
     msgInput.value = '';
     msgInput.style.height = 'auto';
     sendBtn.disabled = true;
@@ -527,15 +630,12 @@
     clearReply();
 
     const { error } = await client.from('messages').insert(payload);
-    if (error) {
-      msgInput.value = content;
-      statusLine('send failed: ' + error.message, '#c06060');
-    }
+    if (error) { msgInput.value = content; statusLine('send failed: ' + error.message, '#c06060'); }
     sendBtn.disabled = false;
     msgInput.focus();
   }
 
-  // Send image
+  // ── Send image ─────────────────────────────────────────
   imgBtn.addEventListener('click', () => fileInput.click());
 
   fileInput.addEventListener('change', async () => {
@@ -545,12 +645,10 @@
 
     const ext  = file.name.split('.').pop();
     const path = Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + ext;
-
     const placeholder = statusLine('\u23F3 uploading image\u2026');
 
     const { error: uploadErr } = await client.storage
-      .from(IMAGE_BUCKET)
-      .upload(path, file, { contentType: file.type });
+      .from(IMAGE_BUCKET).upload(path, file, { contentType: file.type });
 
     if (uploadErr) {
       placeholder.textContent = 'upload failed: ' + uploadErr.message;
@@ -559,11 +657,9 @@
     }
 
     const { data: urlData } = client.storage.from(IMAGE_BUCKET).getPublicUrl(path);
-    const publicUrl = urlData.publicUrl;
-
     placeholder.remove();
 
-    const payload = { username: currentUser, message: IMG_PREFIX + publicUrl };
+    const payload = { username: currentUser, message: IMG_PREFIX + urlData.publicUrl };
     if (replyingTo) payload.reply_to_id = replyingTo.id;
     clearReply();
 
@@ -571,7 +667,7 @@
     if (msgErr) statusLine('failed to send image: ' + msgErr.message, '#c06060');
   });
 
-  // Input handling
+  // ── Input handling ─────────────────────────────────────
   msgInput.addEventListener('input', () => {
     msgInput.style.height = 'auto';
     msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
